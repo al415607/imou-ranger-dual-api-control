@@ -1,4 +1,4 @@
 #!/data/data/com.termux/files/usr/bin/bash
 set -e
 cd "$HOME/imou"
-exec python imou_control.py desactivar
+exec python imou_control.py deactivate

@@ -30,16 +30,16 @@ These property references were verified by comparing the API values against the 
 4. Run:
 
 ```sh
-python imou_control.py estado
-python imou_control.py activar
-python imou_control.py desactivar
+python imou_control.py state
+python imou_control.py activate
+python imou_control.py deactivate
 ```
 
 Commands:
 
-- `estado`: reads motion/human states on both channels.
-- `activar`: sets all four to `1` and verifies.
-- `desactivar`: sets all four to `0` and verifies.
+- `state`: reads motion/human states on both channels.
+- `activate`: sets all four to `1` and verifies.
+- `deactivate`: sets all four to `0` and verifies.
 
 The script does not prompt for confirmation or credentials; this is intentional for automation. An error results in a nonzero exit status. A successful API response **alone** is not treated as proof: the script also checks returned property values.
 
@@ -49,8 +49,8 @@ The script does not prompt for confirmation or credentials; this is intentional 
 2. In Termux install Python: `pkg update && pkg install python`.
 3. Copy `imou_control.py` and your private `.env` to `~/imou/`. Run `chmod 600 ~/imou/.env`.
 4. Create the executable directory: `mkdir -p ~/.termux/tasker`.
-5. Copy `termux/activar_imou` and `termux/desactivar_imou` to `~/.termux/tasker/`, and run `chmod 700 ~/.termux/tasker/*`.
-6. Test in Termux: `~/.termux/tasker/activar_imou` and `~/.termux/tasker/desactivar_imou`.
+5. Copy `termux/activate_imou` and `termux/deactivate_imou` to `~/.termux/tasker/`, and run `chmod 700 ~/.termux/tasker/*`.
+6. Test in Termux: `~/.termux/tasker/activate_imou` and `~/.termux/tasker/deactivate_imou`.
 7. Configure MacroDroid actions with Termux:Tasker using the instructions in [`macrodroid/README.md`](macrodroid/README.md).
 
 The tasker scripts work in the background; no Imou Life UI automation is needed. Android may restrict background work through battery optimization policies, so test from a locked screen and after idle time.
@@ -72,7 +72,3 @@ The tasker scripts work in the background; no Imou Life UI automation is needed.
 
 Imou Open Platform: https://open.imoulife.com/  
 SDK reference: https://github.com/Imou-OpenPlatform/Py-Imou-Open-Api
-
-## License
-
-No open-source license has been selected yet. Add a `LICENSE` file of your choosing before inviting external contributions or granting reuse rights.

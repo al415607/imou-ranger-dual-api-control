@@ -1,6 +1,6 @@
-"""Control de deteccion Imou Ranger Dual por Open Platform.
+"""Imou Ranger Dual detection control by Open Platform.
 
-Uso: python imou_control.py estado|activar|desactivar
+Usage: python imou_control.py state|activate|deactivate
 """
 import argparse
 import base64
@@ -16,164 +16,167 @@ import uuid
 from pathlib import Path
 
 HOST = "https://openapi-fk.easy4ip.com"
-REFERENCIAS = {"108800": "Movimiento", "18200": "Deteccion humana"}
-CANALES = {0: "Movil", 1: "Fija"}
+REFERENCES = {"108800": "Movement", "18200": "Human Detection"}
+CHANNELS = {
+    0: "PT Lens",
+    1: "Fixed Lens"
+}
 
 
-def cargar_env():
-    """Lee .env al lado del script sin dependencias externas."""
-    archivo = Path(__file__).resolve().parent / ".env"
-    if not archivo.is_file():
+def load_env():
+    """Reads the .env file next to the script without external dependencies."""
+    file = Path(__file__).resolve().parent / ".env"
+    if not file.is_file():
         return
-    for linea in archivo.read_text(encoding="utf-8-sig").splitlines():
-        linea = linea.strip()
-        if not linea or linea.startswith("#") or "=" not in linea:
+    for line in file.read_text(encoding="utf-8-sig").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
             continue
-        nombre, valor = linea.split("=", 1)
-        nombre, valor = nombre.strip(), valor.strip()
-        if nombre in {"IMOU_APP_ID", "IMOU_APP_SECRET", "IMOU_DEVICE_ID"}:
-            os.environ.setdefault(nombre, valor)
+        name, value = line.split("=", 1)
+        name, value = name.strip(), value.strip()
+        if name in {"IMOU_APP_ID", "IMOU_APP_SECRET", "IMOU_DEVICE_ID"}:
+            os.environ.setdefault(name, value)
 
 
-def credencial(nombre):
-    valor = os.getenv(nombre, "").strip()
-    if not valor:
-        raise ValueError(f"Falta {nombre}. Configura el archivo .env")
-    return valor
+def credential(name):
+    value = os.getenv(name, "").strip()
+    if not value:
+        raise ValueError(f"{name} is missing. Configure the .env file")
+    return value
 
 
 def api(endpoint, params, app_id, app_secret):
-    instante = int(time.time())
+    instant = int(time.time())
     nonce = str(uuid.uuid4())
-    mensaje = f"time:{instante},nonce:{nonce},appSecret:{app_secret}"
-    clave = hashlib.sha256(app_secret.encode()).hexdigest().encode()
-    firma = base64.b64encode(hmac.new(clave, mensaje.encode(), hashlib.sha256).digest()).decode()
-    cuerpo = {
-        "system": {"ver": "1.0", "appId": app_id, "sign": firma, "time": instante, "nonce": nonce},
+    message = f"time:{instant},nonce:{nonce},appSecret:{app_secret}"
+    key = hashlib.sha256(app_secret.encode()).hexdigest().encode()
+    signature = base64.b64encode(hmac.new(key, message.encode(), hashlib.sha256).digest()).decode()
+    body = {
+        "system": {"ver": "1.0", "appId": app_id, "sign": signature, "time": instant, "nonce": nonce},
         "id": str(uuid.uuid4()),
         "params": params,
     }
-    peticion = urllib.request.Request(
+    request = urllib.request.Request(
         f"{HOST}/openapi/{endpoint}",
-        data=json.dumps(cuerpo).encode(),
+        data=json.dumps(body).encode(),
         headers={"Content-Type": "application/json"}, method="POST",
     )
     try:
-        with urllib.request.urlopen(peticion, timeout=20) as respuesta:
-            contenido = json.load(respuesta)
+        with urllib.request.urlopen(request, timeout=20) as answer:
+            content = json.load(answer)
     except (urllib.error.URLError, TimeoutError) as error:
-        raise RuntimeError(f"Error de red en {endpoint}: {error}") from error
-    resultado = contenido.get("result", {})
-    if str(resultado.get("code")) != "0":
+        raise RuntimeError(f"Network error at {endpoint}: {error}") from error
+    result = content.get("result", {})
+    if str(result.get("code")) != "0":
         raise RuntimeError(
-            f"{endpoint} rechazado: {resultado.get('code')} - {resultado.get('msg')}"
+            f"{endpoint} refused: {result.get('code')} - {result.get('msg')}"
         )
-    return resultado.get("data") or {}
+    return result.get("data") or {}
 
 
-def obtener_producto(token, device_id, app_id, app_secret):
-    for pagina in range(1, 11):
-        datos = api("listDeviceDetailsByPage", {
-            "token": token, "page": pagina, "pageSize": 20, "source": "bindAndShare"
+def get_product(token, device_id, app_id, app_secret):
+    for page in range(1, 11):
+        data = api("listDeviceDetailsByPage", {
+            "token": token, "page": page, "pageSize": 20, "source": "bindAndShare"
         }, app_id, app_secret)
-        dispositivos = datos.get("deviceList", [])
-        for dispositivo in dispositivos:
-            if dispositivo.get("deviceId") == device_id:
-                producto = dispositivo.get("productId")
-                if not producto:
-                    raise RuntimeError("La camara no devuelve productId")
-                return producto
-        if len(dispositivos) < 20:
+        devices = data.get("deviceList", [])
+        for device in devices:
+            if device.get("deviceId") == device_id:
+                product = device.get("productId")
+                if not product:
+                    raise RuntimeError("The camera does not return the productId")
+                return product
+        if len(devices) < 20:
             break
-    raise RuntimeError("La camara no aparece entre los dispositivos vinculados")
+    raise RuntimeError("The camera does not appear among the linked devices")
 
 
-def leer(token, device_id, product_id, canal, app_id, app_secret):
-    datos = api("getIotDeviceProperties", {
+def read(token, device_id, product_id, channel, app_id, app_secret):
+    data = api("getIotDeviceProperties", {
         "token": token,
         "deviceList": [{
-            "deviceId": device_id, "channelId": canal,
-            "productId": product_id, "properties": list(REFERENCIAS)
+            "deviceId": device_id, "channelId": channel,
+            "productId": product_id, "properties": list(REFERENCES)
         }],
     }, app_id, app_secret)
-    lista = datos.get("deviceList") or []
-    if not lista or not isinstance(lista[0].get("properties"), dict):
-        raise RuntimeError(f"El canal {canal} no ha devuelto propiedades validas")
-    propiedades = lista[0]["properties"]
-    if not all(ref in propiedades for ref in REFERENCIAS):
-        raise RuntimeError(f"Faltan propiedades en canal {canal}: {list(propiedades)}")
-    return {ref: propiedades[ref] for ref in REFERENCIAS}
+    devices = data.get("deviceList") or []
+    if not devices or not isinstance(devices[0].get("properties"), dict):
+        raise RuntimeError(f"The channel {channel} has not returned valid properties")
+    properties = devices[0]["properties"]
+    if not all(ref in properties for ref in REFERENCES):
+        raise RuntimeError(f"Properties are missing in channel {channel}: {list(properties)}")
+    return {ref: properties[ref] for ref in REFERENCES}
 
 
-def mostrar_estado(token, device_id, product_id, app_id, app_secret):
-    for canal, nombre in CANALES.items():
-        valores = leer(token, device_id, product_id, canal, app_id, app_secret)
-        print(f"Canal {canal} ({nombre}): " + ", ".join(
-            f"{REFERENCIAS[ref]}={valores[ref]}" for ref in REFERENCIAS
+def show_state(token, device_id, product_id, app_id, app_secret):
+    for channel, name in CHANNELS.items():
+        values = read(token, device_id, product_id, channel, app_id, app_secret)
+        print(f"Channel {channel} ({name}): " + ", ".join(
+            f"{REFERENCES[ref]}={values[ref]}" for ref in REFERENCES
         ))
 
 
-def escribir(token, device_id, product_id, canal, valor, app_id, app_secret):
+def write(token, device_id, product_id, channel, value, app_id, app_secret):
     api("setIotDeviceProperties", {
         "token": token,
         "deviceList": [{
-            "deviceId": device_id, "channelId": canal,
+            "deviceId": device_id, "channelId": channel,
             "productId": product_id,
-            "properties": {ref: valor for ref in REFERENCIAS},
+            "properties": {ref: value for ref in REFERENCES},
         }],
     }, app_id, app_secret)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Control de deteccion Imou Ranger Dual")
-    parser.add_argument("accion", choices=["estado", "activar", "desactivar"])
+    parser = argparse.ArgumentParser(description="Control of Imou Ranger Dual detection")
+    parser.add_argument("action", choices=["state", "activate", "deactivate"])
     args = parser.parse_args()
-    cargar_env()
-    app_id = credencial("IMOU_APP_ID")
-    app_secret = credencial("IMOU_APP_SECRET")
-    device_id = credencial("IMOU_DEVICE_ID")
+    load_env()
+    app_id = credential("IMOU_APP_ID")
+    app_secret = credential("IMOU_APP_SECRET")
+    device_id = credential("IMOU_DEVICE_ID")
 
     auth = api("accessToken", {}, app_id, app_secret)
     token = auth.get("accessToken")
     if not token:
-        raise RuntimeError("La autenticacion no devolvio un accessToken")
-    producto = obtener_producto(token, device_id, app_id, app_secret)
+        raise RuntimeError("Authentication did not return an accessToken")
+    product = get_product(token, device_id, app_id, app_secret)
 
-    print("\nEstado inicial:")
-    mostrar_estado(token, device_id, producto, app_id, app_secret)
-    if args.accion == "estado":
+    print("\nInitial state:")
+    show_state(token, device_id, product, app_id, app_secret)
+    if args.action == "state":
         return
 
-    valor = 1 if args.accion == "activar" else 0
-    print(f"\nEjecutando {args.accion} para las dos lentes (sin confirmacion)...")
-    errores = []
-    for canal, nombre in CANALES.items():
+    value = 1 if args.action == "activate" else 0
+    print(f"\nExecuting {args.action} for both lenses (without confirmation)...")
+    errors = []
+    for channel, name in CHANNELS.items():
         try:
-            escribir(token, device_id, producto, canal, valor, app_id, app_secret)
-            print(f"Orden enviada a canal {canal} ({nombre}).")
+            write(token, device_id, product, channel, value, app_id, app_secret)
+            print(f"Order sent to channel {channel} ({name}).")
         except Exception as exc:
-            errores.append(f"Canal {canal}: {exc}")
-            print(f"ERROR en canal {canal}: {exc}")
+            errors.append(f"Channel {channel}: {exc}")
+            print(f"ERROR in channel {channel}: {exc}")
 
     time.sleep(3)
-    print("\nVerificacion:")
-    for canal, nombre in CANALES.items():
+    print("\nVerification:")
+    for channel, name in CHANNELS.items():
         try:
-            estado = leer(token, device_id, producto, canal, app_id, app_secret)
-            correcto = all(str(x) == str(valor) for x in estado.values())
-            print(f"Canal {canal} ({nombre}): {estado} -> {'OK' if correcto else 'NO COINCIDE'}")
-            if not correcto:
-                errores.append(f"Canal {canal}: estado distinto del solicitado")
+            state = read(token, device_id, product, channel, app_id, app_secret)
+            correct = all(str(x) == str(value) for x in state.values())
+            print(f"Channel {channel} ({name}): {state} -> {'OK' if correct else 'MISMATCH'}")
+            if not correct:
+                errors.append(f"Channel {channel}: state different from requested")
         except Exception as exc:
-            errores.append(f"Canal {canal}: fallo de lectura: {exc}")
-            print(f"Canal {canal}: no se pudo verificar: {exc}")
+            errors.append(f"Channel {channel}: read failure: {exc}")
+            print(f"Channel {channel}: could not be verified: {exc}")
 
-    if errores:
-        print("\nATENCION: no se puede asegurar que toda la vigilancia tenga el estado solicitado.")
-        for error in errores:
+    if errors:
+        print("\nERROR: Not all detection settings could be verified.")
+        for error in errors:
             print("-", error)
         sys.exit(1)
-    print("\nTodas las propiedades verificadas por API.")
+    print("\nAll properties verified by API.")
 
 
 if __name__ == "__main__":
