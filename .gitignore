@@ -1,0 +1,15 @@
+# Credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# Logs and local files
+*.log
+.DS_Store
